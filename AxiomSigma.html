@@ -1,0 +1,126 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>AXIOM-SIGMA | PATH-ABSOLUTE</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        body {
+            background: #010103;
+            color: #00ff66;
+            font-family: 'Fira Code', monospace;
+            overflow: hidden;
+            margin: 0;
+        }
+
+        .manifold-wrapper {
+            display: flex;
+            width: 200vw;
+            height: 100vh;
+            transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+
+        .pane {
+            width: 100vw;
+            height: 100vh;
+            padding: 40px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .glass-core {
+            background: rgba(0, 15, 0, 0.8);
+            border: 1px solid #00ff6633;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root-manifold" class="manifold-wrapper">
+        <section class="pane">
+            <h1 class="text-5xl font-black uppercase mb-10 border-b border-emerald-900 pb-4">Axiom-Sigma</h1>
+            <div class="glass-core p-8 rounded-lg flex-1 flex flex-col gap-6">
+                <textarea id="intent-field"
+                    class="flex-1 bg-black/50 border border-emerald-900 p-6 text-emerald-300 outline-none focus:border-emerald-500 font-mono text-sm"
+                    placeholder="Define System Intent..."></textarea>
+                <button onclick="Axiom.resonate()"
+                    class="w-full bg-emerald-600 text-black font-black py-6 uppercase tracking-[1em] hover:bg-emerald-400 transition-all text-2xl">Send</button>
+            </div>
+        </section>
+
+        <section class="pane">
+            <div class="flex justify-between items-center mb-10 border-b border-emerald-900 pb-4">
+                <h1 class="text-4xl font-black uppercase italic">Reality-Output</h1>
+                <button onclick="Axiom.shift(0)"
+                    class="text-xs border border-emerald-900 px-4 py-2 hover:border-emerald-500 uppercase">New
+                    Inquiry</button>
+            </div>
+            <div class="flex-1 flex gap-8 overflow-hidden">
+                <div class="w-72 glass-core p-6 overflow-y-auto rounded-lg">
+                    <ul id="fs-list" class="space-y-4 font-mono text-[11px] uppercase font-bold"></ul>
+                </div>
+                <div class="flex-1 glass-core rounded-lg flex flex-col overflow-hidden">
+                    <div id="file-path"
+                        class="p-3 bg-emerald-950/30 text-[10px] border-b border-emerald-900/30 uppercase">Node_View
+                    </div>
+                    <pre id="editor"
+                        class="flex-1 p-8 overflow-auto font-mono text-xs text-emerald-400 leading-relaxed"></pre>
+                </div>
+            </div>
+            <button onclick="Axiom.exportBuild()"
+                class="w-full mt-8 border-2 border-emerald-500 py-6 font-black text-emerald-500 tracking-[1em] hover:bg-emerald-500 hover:text-black transition-all uppercase text-2xl">Export</button>
+        </section>
+    </div>
+
+    <script>
+        const Axiom = (() => {
+            let state = { fs: {} };
+
+            const resonate = () => {
+                const q = document.getElementById('intent-field').value.trim();
+                if (!q) return;
+
+                state.fs = {
+                    "backend/main.py": `import os\nfrom fastapi import FastAPI, WebSocket\nfrom fastapi.middleware.cors import CORSMiddleware\nfrom sqlalchemy import create_engine, Column, Integer, Text\nfrom sqlalchemy.ext.declarative import declarative_base\nfrom sqlalchemy.orm import sessionmaker\nimport uvicorn\n\napp = FastAPI()\napp.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])\n\nDB_PATH = os.getenv("DATABASE_URL", "sqlite:///./sovereign_vault.db")\nengine = create_engine(DB_PATH, connect_args={"check_same_thread": False} if "sqlite" in DB_PATH else {})\nSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)\nBase = declarative_base()\n\nclass DataEntry(Base):\n    __tablename__ = "entries"\n    id = Column(Integer, primary_key=True, index=True)\n    content = Column(Text)\n\nBase.metadata.create_all(bind=engine)\n\n@app.websocket("/ws")\nasync def websocket_endpoint(websocket: WebSocket):\n    await websocket.accept()\n    db = SessionLocal()\n    while True:\n        data = await websocket.receive_text()\n        db.add(DataEntry(content=data))\n        db.commit()\n        await websocket.send_text(f"Persisted: {data}")\n\nif __name__ == "__main__":\n    port = int(os.environ.get("PORT", 8000))\n    uvicorn.run(app, host="0.0.0.0", port=port)`,
+
+                    "frontend/index.html": `<!DOCTYPE html>\n<html>\n<body class="bg-black text-green-500 p-10 font-mono">\n    <h1>System Manifested: ${q}<\/h1>\n    <div id="out" class="h-64 border border-green-900 my-4 p-2 bg-zinc-950 overflow-auto"><\/div>\n    <input id="i" class="bg-zinc-900 border border-green-900 p-2"><button onclick="s()" class="bg-green-600 text-black px-4 ml-2">COMMIT<\/button>\n    <script>\n        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';\n        const host = window.location.host;\n        const ws = new WebSocket(protocol + '//' + host + '/ws');\n        ws.onmessage = (e) => { const d = document.createElement('div'); d.textContent = '> ' + e.data; document.getElementById('out').appendChild(d); };\n        function s() { ws.send(document.getElementById('i').value); document.getElementById('i').value = ''; }\n    <\/script>\n<\/body>\n<\/html>`,
+
+                    "requirements.txt": "fastapi\nuvicorn\nsqlalchemy",
+                    "Procfile": "web: uvicorn backend.main:app --host 0.0.0.0 --port $PORT",
+                    "Dockerfile": "FROM python:3.11-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install -r requirements.txt\nCOPY . .\nCMD uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
+                };
+
+                render();
+                shift(1);
+            };
+
+            const render = () => {
+                const list = document.getElementById('fs-list');
+                list.innerHTML = Object.keys(state.fs).map(fn => `<li onclick="Axiom.view('${fn}')" class="cursor-pointer hover:text-white transition-all pl-2 border-l border-emerald-900 hover:border-emerald-500">${fn}</li>`).join('');
+                view(Object.keys(state.fs)[0]);
+            };
+
+            const view = (fn) => {
+                document.getElementById('editor').textContent = state.fs[fn];
+                document.getElementById('file-path').innerText = `NODE: ${fn}`;
+            };
+
+            const exportBuild = async () => {
+                const zip = new JSZip();
+                for (let f in state.fs) zip.file(f, state.fs[f]);
+                const blob = await zip.generateAsync({ type: "blob" });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob); a.download = "AXIOM_SOVEREIGN.zip"; a.click();
+            };
+
+            const shift = (page) => document.getElementById('root-manifold').style.transform = `translateX(-${page * 100}vw)`;
+
+            return { resonate, exportBuild, shift, view };
+        })();
+    </script>
+</body>
+
+</html>
